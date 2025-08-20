@@ -2,111 +2,94 @@ package haunted;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.*;
-import java.util.Random;
 
-public class HauntedRadioScreen extends JPanel implements ActionListener {
-    private int channel = 0;
-    private Timer timer;
-    private Random random = new Random();
-    private boolean showStatic = true;
-    private Radio radio;
-
+public class HauntedRadioScreen extends JFrame {
     public HauntedRadioScreen() {
-        radio = new Radio();
+        setTitle("Haunted Radio (Look Only)");
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setSize(900, 700);
+        setLocationRelativeTo(null);
 
-        timer = new Timer(200, this); // refresh
-        timer.start();
+        add(new RadioPanel());
+    }
 
-        addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                // Knob to change channel
-                if (e.getX() > 600 && e.getX() < 650 && e.getY() > 400 && e.getY() < 450) {
-                    channel = nextChannel();
-                    showStatic = true;
-                    repaint();
-                }
-            }
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            HauntedRadioScreen frame = new HauntedRadioScreen();
+            frame.setVisible(true);
         });
     }
+}
 
-    private int nextChannel() {
-        if (HauntedRadio.isSecretUnlocked() && channel == 5) {
-            return 666;
-        }
-        if (channel == 666) {
-            return 0;
-        }
-        return (channel + 1) % 6; // 0–5
-    }
-
+class RadioPanel extends JPanel {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
+        Graphics2D g2 = (Graphics2D) g;
+
+        // Smooth drawing
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                RenderingHints.VALUE_ANTIALIAS_ON);
 
         // Background
-        g.setColor(new Color(20, 20, 40));
-        g.fillRect(0, 0, getWidth(), getHeight());
+        g2.setColor(new Color(25, 20, 20));
+        g2.fillRect(0, 0, getWidth(), getHeight());
 
-        // Title
-        g.setFont(new Font("Monospaced", Font.BOLD, 36));
-        g.setColor(new Color(255, 230, 180));
-        g.drawString("HAUNTED RADIO", 240, 80);
+        // 1. Wooden radio body
+        g2.setPaint(new GradientPaint(0, 0,
+                new Color(130, 80, 30), // top brown
+                0, getHeight(),
+                new Color(70, 40, 15))); // bottom brown
+        g2.fillRoundRect(50, 50, getWidth() - 100, getHeight() - 100, 50, 50);
 
-        // Retro Radio Body
-        g.setColor(new Color(80, 30, 30));
-        g.fillRoundRect(200, 150, 400, 300, 30, 30);
+        // 2. Speaker grille
+        int grilleX = 200, grilleY = 120, grilleW = 500, grilleH = 300;
+        g2.setColor(new Color(40, 40, 40));
+        g2.fillRoundRect(grilleX, grilleY, grilleW, grilleH, 30, 30);
 
-        // Antennas
-        g.setColor(Color.GRAY);
-        g.drawLine(300, 150, 250, 50);
-        g.drawLine(500, 150, 550, 50);
-
-        // Speaker Grill
-        g.setColor(Color.BLACK);
-        for (int i = 0; i < 10; i++) {
-            g.fillRect(220 + i * 30, 180, 20, 100);
-        }
-
-        // Display Screen
-        g.setColor(Color.DARK_GRAY);
-        g.fillRect(320, 300, 160, 60);
-        g.setColor(Color.GREEN);
-        g.setFont(new Font("Monospaced", Font.PLAIN, 20));
-        g.drawString("CH: " + channel, 340, 340);
-
-        // Static Effect
-        if (showStatic) {
-            for (int i = 0; i < 300; i++) {
-                int x = 320 + random.nextInt(160);
-                int y = 300 + random.nextInt(60);
-                g.setColor(new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)));
-                g.drawLine(x, y, x, y);
-            }
-        } else {
-            // Broadcast
-            String broadcastText = radio.tune(channel);
-            String glitched = GlitchEffect.apply(broadcastText);
-
-            int y = 400;
-            g.setColor(Color.WHITE);
-            for (String line : glitched.split("\n")) {
-                g.drawString(line, 100, y);
-                y += 20;
+        // Mesh dots
+        g2.setColor(new Color(90, 90, 90));
+        for (int x = grilleX + 10; x < grilleX + grilleW - 10; x += 15) {
+            for (int y = grilleY + 10; y < grilleY + grilleH - 10; y += 15) {
+                g2.fillOval(x, y, 5, 5);
             }
         }
 
-        // Knob
-        g.setColor(Color.LIGHT_GRAY);
-        g.fillOval(600, 400, 50, 50);
-        g.setColor(Color.BLACK);
-        g.drawString("Tune", 605, 430);
-    }
+        // 3. Frequency dial window
+        int dialX = 200, dialY = 450, dialW = 500, dialH = 60;
+        g2.setColor(Color.BLACK);
+        g2.fillRect(dialX, dialY, dialW, dialH);
 
-    @Override
-    public void actionPerformed(ActionEvent e) {
-        showStatic = false;
-        repaint();
+        g2.setColor(Color.GREEN);
+        g2.setFont(new Font("Monospaced", Font.BOLD, 18));
+        g2.drawString("600   700   800   900   1000   1080", dialX + 20, dialY + 35);
+
+        // Glass reflection effect
+        g2.setPaint(new GradientPaint(dialX, dialY,
+                new Color(255, 255, 255, 60),
+                dialX, dialY + dialH,
+                new Color(0, 0, 0, 0)));
+        g2.fillRect(dialX, dialY, dialW, dialH);
+
+        // 4. Knobs (static)
+        g2.setColor(new Color(60, 60, 60));
+        g2.fillOval(120, 500, 80, 80); // volume knob
+        g2.fillOval(680, 500, 80, 80); // tuning knob
+
+        g2.setColor(Color.LIGHT_GRAY);
+        g2.setStroke(new BasicStroke(3));
+        g2.drawOval(120, 500, 80, 80);
+        g2.drawOval(680, 500, 80, 80);
+
+        // Knob indicators
+        g2.drawLine(160, 540, 160, 510); // left knob tick
+        g2.drawLine(720, 540, 750, 540); // right knob tick
+
+        // 5. Power button (static)
+        g2.setColor(new Color(180, 30, 30));
+        g2.fillRoundRect(400, 540, 100, 40, 15, 15);
+        g2.setColor(Color.WHITE);
+        g2.setFont(new Font("SansSerif", Font.BOLD, 14));
+        g2.drawString("POWER", 425, 565);
     }
 }

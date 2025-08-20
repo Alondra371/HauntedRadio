@@ -6,32 +6,29 @@ public class HauntedRadio {
     private static boolean secretUnlocked = false;
 
     public static void main(String[] args) {
-        // Show Swing Splash First
         SwingUtilities.invokeLater(() -> {
             JFrame frame = new JFrame("Haunted Radio");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setSize(800, 600);
             frame.setLocationRelativeTo(null);
-            frame.add(new HauntedSplashScreen());
-            frame.setVisible(true);
 
-            // Auto-close after 4 seconds and start HauntedRadioScreen
-            new javax.swing.Timer(4000, e -> {
+            // Splash screen with callback
+            HauntedSplashScreen splash = new HauntedSplashScreen(() -> {
                 frame.dispose();
                 launchRadioGame();
-            }).start();
+            });
+
+            frame.add(splash);
+            frame.setVisible(true);
+
+            splash.requestFocusInWindow();
+            new Timer(1000 / 60, e -> splash.repaint()).start(); // repaint loop
         });
     }
 
     public static void launchRadioGame() {
-        JFrame gameFrame = new JFrame("Haunted Radio");
-        gameFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        gameFrame.setSize(800, 600);
-        gameFrame.setLocationRelativeTo(null);
-
-        HauntedRadioScreen panel = new HauntedRadioScreen();
-        gameFrame.add(panel);
-        gameFrame.setVisible(true);
+        HauntedRadioScreen radioScreen = new HauntedRadioScreen();
+        radioScreen.setVisible(true);
     }
 
     public static void unlockSecret() {
