@@ -2,100 +2,151 @@ package haunted;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
+/**
+ * Main interactive window for the Haunted Radio GUI.
+ * - Center: a custom-drawn radio panel (RadioPanel) that shows your animated GIF in the dial.
+ * - Bottom: controls to tune channels, stop audio, and adjust volume.
+ *
+ * Channels:
+ *   1–4  -> play random Spanish spooky podcasts (with glitch bursts)
+ *   5    -> shows a riddle dialog; correct answer unlocks 666
+ *   666  -> ghost broadcast + hidden Morse message
+ */
 public class HauntedRadioScreen extends JFrame {
+    // ----- UI components -----
+    private final RadioPanel panel;         // draws the radio body + ghost GIF in the dial
+    private final JButton ch1, ch2, ch3, ch4, ch5, ch666, stopBtn;
+    private final JSlider volume;
+    private final JLabel status;
+
+    // ----- Logic / audio -----
+    private final ChannelManagerSwing channels; // bridges buttons to audio + riddle logic
+
     public HauntedRadioScreen() {
-        setTitle("Haunted Radio (Look Only)");
+        // Basic window setup
+        setTitle("Haunted Radio — Interactive");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setSize(900, 700);
+        setSize(980, 720);
         setLocationRelativeTo(null);
+        setLayout(new BorderLayout());
 
-        add(new RadioPanel());
-    }
+        // Audio root (relative to working dir): audio/static.wav, audio/ghost_broadcast.wav, audio/spanish_podcasts/*.wav
+        Path audioRoot = Paths.get("audio");
+        channels = new ChannelManagerSwing(audioRoot);
 
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            HauntedRadioScreen frame = new HauntedRadioScreen();
-            frame.setVisible(true);
+        // Center: custom-painted radio with animated GIF in the dial
+        panel = new RadioPanel();
+        add(panel, BorderLayout.CENTER);
+
+        // Bottom: control strip (buttons + volume + status)
+        JPanel controls = new JPanel(new GridBagLayout());
+        controls.setBackground(new Color(22, 20, 24)); // dark theme to match the radio
+        GridBagConstraints c = new GridBagConstraints();
+        c.insets = new Insets(8, 8, 8, 8);
+
+        // Row 1: Channel buttons + Stop
+        c.gridx = 0; c.gridy = 0; ch1   = mkBtn("1");            controls.add(ch1, c);
+        c.gridx = 1;             ch2   = mkBtn("2");            controls.add(ch2, c);
+        c.gridx = 2;             ch3   = mkBtn("3");            controls.add(ch3, c);
+        c.gridx = 3;             ch4   = mkBtn("4");            controls.add(ch4, c);
+        c.gridx = 4;             ch5   = mkBtn("5 (Riddle)");   controls.add(ch5, c);
+        c.gridx = 5;             ch666 = mkBtn("666");          ch666.setEnabled(false); controls.add(ch666, c);
+
+        c.gridx = 6;             stopBtn = new JButton("Stop");
+        // Keep button style consistent
+        stopBtn.setFocusPainted(false);
+        stopBtn.setBackground(new Color(50, 30, 30));
+        stopBtn.setForeground(new Color(210, 240, 210));
+        controls.add(stopBtn, c);
+
+        // Row 2: Volume label + slider (map 0..100 -> 0.0..1.0)
+        c.gridx = 0; c.gridy = 1; c.gridwidth = 2;
+        JLabel volLabel = new JLabel("Volume");
+        volLabel.setForeground(new Color(200, 220, 210));
+        controls.add(volLabel, c);
+
+        c.gridx = 2; c.gridwidth = 4;
+        volume = new JSlider(0, 100, 85);
+        controls.add(volume, c);
+
+        // Initialize player volume and wire slider to update live
+        channels.getPlayer().setVolume(volume.getValue() / 100f);
+        volume.addChangeListener(ev -> channels.getPlayer().setVolume(volume.getValue() / 100f));
+
+        // Row 3: status bar
+        c.gridx = 0; c.gridy = 2; c.gridwidth = 7;
+        status = new JLabel("Ready. Tune a channel.");
+        status.setForeground(new Color(190, 230, 200));
+        controls.add(status, c);
+
+        add(controls, BorderLayout.SOUTH);
+
+        // ---------- Actions ----------
+        // Shared handler for channels 1–4
+        ch1.addActionListener(this::playChan);
+        ch2.addActionListener(this::playChan);
+        ch3.addActionListener(this::playChan);
+        ch4.addActionListener(this::playChan);
+
+        // Channel 5 -> riddle popup flow; correct answer enables 666
+        ch5.addActionListener(evt -> handleRiddle());
+
+        // Channel 666 -> ghost broadcast + Morse beeps
+        ch666.addActionListener(evt -> {
+            status.setText("Channel 666 — Ghost broadcast + Morse");
+            channels.playGhost();
         });
+
+        // Stop -> immediately stop any current audio
+        stopBtn.addActionListener(e -> channels.getPlayer().stopAudio());
     }
-}
 
-class RadioPanel extends JPanel {
-    @Override
-    protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        Graphics2D g2 = (Graphics2D) g;
+    /**
+     * Small helper to create consistently styled buttons for the radio.
+     * Centralizing styling makes it easy to tweak the look in one place.
+     */
+    private JButton mkBtn(String label) {
+        JButton b = new JButton(label);
+        b.setFocusPainted(false);
+        b.setBackground(new Color(50, 30, 30));   // subtle spooky vibe
+        b.setForeground(new Color(210, 240, 210)); // readable on dark bg
+        return b;
+    }
 
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                RenderingHints.VALUE_ANTIALIAS_ON);
+    /**
+     * Shared handler for channels 1–4. We parse the number from the button label
+     * so we can reuse the same code for all four buttons.
+     */
+    private void playChan(ActionEvent evt) {
+        String txt = ((JButton) evt.getSource()).getText();
+        // Ensure we extract just the digits (in case labels change later)
+        int ch = Integer.parseInt(txt.replaceAll("\\D", ""));
+        status.setText("Playing Channel " + ch + "...");
+        channels.playChannel(ch);
+    }
 
-        // Background (dark stone look)
-        g2.setColor(new Color(30, 28, 30));
-        g2.fillRect(0, 0, getWidth(), getHeight());
+    /**
+     * Pops the riddle dialog for Channel 5.
+     * Correct answers: "shadow" or "sombra" (case-insensitive, partial accepted via contains()).
+     * On success: enable Channel 666; on failure: play a short static burst.
+     */
+    private void handleRiddle() {
+        String prompt = "Channel 5 — Riddle\n"
+                + "I follow you by day, I leave you by night,\n"
+                + "I vanish in darkness yet cling to the light. What am I?";
+        String ans = JOptionPane.showInputDialog(this, prompt, "Riddle", JOptionPane.QUESTION_MESSAGE);
+        if (ans == null) return; // user canceled the dialog
 
-        // === 1. Wooden radio body ===
-        int bodyX = 150, bodyY = 150, bodyW = 600, bodyH = 300;
-        g2.setColor(new Color(110, 75, 47)); // wood brown
-        g2.fillRoundRect(bodyX, bodyY, bodyW, bodyH, 20, 20);
-        g2.setColor(new Color(63, 42, 24));
-        g2.setStroke(new BasicStroke(4));
-        g2.drawRoundRect(bodyX, bodyY, bodyW, bodyH, 20, 20);
-
-        // === 2. Speaker grille (left side, upper half) ===
-        int grilleX = bodyX + 20, grilleY = bodyY + 30, grilleW = 300, grilleH = 120;
-        g2.setColor(new Color(96, 66, 37)); // dark inset
-        g2.fillRect(grilleX, grilleY, grilleW, grilleH);
-
-        g2.setColor(new Color(217, 199, 166)); // beige slats
-        for (int y = grilleY + 10; y < grilleY + grilleH; y += 12) {
-            g2.fillRect(grilleX + 5, y, grilleW - 10, 6);
+        if (channels.trySolveRiddle(ans)) {
+            ch666.setEnabled(true);
+            status.setText("✅ Correct. Channel 666 unlocked.");
+        } else {
+            status.setText("❌ Not quite. Static...");
+            channels.playStatic(1000);
         }
-
-        // === 3. Frequency dial window (right side, upper half) ===
-        int dialX = bodyX + 340, dialY = bodyY + 30, dialW = 220, dialH = 120;
-        g2.setColor(Color.BLACK);
-        g2.fillRoundRect(dialX, dialY, dialW, dialH, 10, 10);
-        g2.setColor(new Color(183, 166, 129));
-        g2.drawRoundRect(dialX, dialY, dialW, dialH, 10, 10);
-
-        g2.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        g2.setColor(Color.GREEN);
-        g2.drawString("FM   AM   SW", dialX + 15, dialY + 20);
-
-        g2.setColor(Color.RED);
-        g2.drawString("88   92   96   100   104   108", dialX + 15, dialY + 50);
-
-        g2.setColor(Color.YELLOW);
-        g2.drawString("530  700  900  1000  1200  1600", dialX + 15, dialY + 80);
-
-        // === 4. Control section (bottom strip) ===
-        int controlY = bodyY + 180;
-        g2.setColor(new Color(70, 50, 30));
-        g2.fillRect(bodyX + 20, controlY, bodyW - 40, 80);
-
-        // Small knobs
-        g2.setColor(new Color(30, 15, 10));
-        g2.fillOval(bodyX + 40, controlY + 10, 40, 40);
-        g2.fillOval(bodyX + 100, controlY + 10, 40, 40);
-        g2.setColor(new Color(200, 200, 200));
-        g2.drawOval(bodyX + 40, controlY + 10, 40, 40);
-        g2.drawOval(bodyX + 100, controlY + 10, 40, 40);
-
-        // Large tuning knob (right)
-        int knobSize = 70;
-        int knobX = bodyX + bodyW - knobSize - 30;
-        int knobY = controlY + 5;
-        g2.setColor(new Color(30, 15, 10));
-        g2.fillOval(knobX, knobY, knobSize, knobSize);
-        g2.setColor(new Color(200, 200, 200));
-        g2.setStroke(new BasicStroke(3));
-        g2.drawOval(knobX, knobY, knobSize, knobSize);
-        g2.drawLine(knobX + knobSize/2, knobY + knobSize/2, knobX + knobSize/2, knobY + 15);
-
-        // === 5. Antenna ===
-        g2.setStroke(new BasicStroke(2));
-        g2.setColor(Color.LIGHT_GRAY);
-        g2.drawLine(bodyX + 30, bodyY, bodyX - 80, bodyY - 100);
     }
 }
